@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マインスイーパー</title>
+    <style>
+        /* Google Fontsからフォントをインポート */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap');
+
+        /* 基本的なスタイル設定 */
+        :root {
+            --bg-color: #f0f2f5;
+            --container-bg: #ffffff;
+            --border-color: #d9d9d9;
+            --cell-bg: #bdbdbd;
+            --cell-bg-hover: #cccccc;
+            --cell-revealed-bg: #e0e0e0;
+            --primary-color: #1890ff;
+            --danger-color: #f5222d;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --font-family: 'Noto Sans JP', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* 上寄せに変更 */
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 2rem; /* 上部に余白を追加 */
+        }
+
+        .game-container {
+            background-color: var(--container-bg);
+            padding: 2rem;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px var(--shadow-color);
+            text-align: center;
+            width: fit-content;
+            max-width: 95vw;
+        }
+
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+
+        /* 難易度選択ボタンのスタイル */
+        .difficulty-controls, .game-controls {
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background-color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-family: var(--font-family);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px var(--shadow-color);
+        }
+
+        .btn:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px var(--shadow-color);
+        }
+
+        .btn.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        /* ゲーム情報エリアのスタイル */
+        .game-info {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 1.5rem;
+            color: #555;
+        }
+        
+        .game-info span {
+            color: var(--danger-color);
+            margin-left: 8px;
+        }
+
+        /* ゲームグリッドのスタイル */
+        #game-grid {
+            display: grid;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #ccc;
+        }
+
+        .cell {
+            width: 30px;
+            height: 30px;
+            background-color: var(--cell-bg);
+            border: 1px solid #9e9e9e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none; /* テキスト選択を無効化 */
+            transition: all 0.1s ease-in-out;
+        }
+
+        .cell:not(.revealed):hover {
+            background-color: var(--cell-bg-hover);
+        }
+        
+        /* クリック時のアニメーション */
+        .cell:active:not(.revealed) {
+            transform: scale(0.95);
+        }
+
+        .cell.revealed {
+            background-color: var(--cell-revealed-bg);
+            border-color: #bdbdbd;
+            cursor: default;
+        }
+        
+        .cell.flagged::before {
+            content: '🚩';
+            font-size: 1rem;
+            animation: place-flag 0.2s ease-out;
+        }
+
+        .cell.mine {
+            background-color: var(--danger-color);
+        }
+        
+        .cell.mine::before {
+            content: '💣';
+            font-size: 1rem;
+            animation: reveal-mine 0.3s ease;
+        }
+
+        .cell.exploded {
+            background-color: #ff4d4f;
+        }
+
+        .cell.exploded::before {
+             content: '💥';
+            font-size: 1rem;
+        }
+
+        /* アニメーションの定義 */
+        @keyframes place-flag {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes reveal-mine {
+             from { transform: scale(0); }
+             to { transform: scale(1); }
+        }
+
+        /* 数字の色分け */
+        .cell[data-mines="1"] { color: #1976d2; }
+        .cell[data-mines="2"] { color: #388e3c; }
+        .cell[data-mines="3"] { color: #d32f2f; }
+        .cell[data-mines="4"] { color: #7b1fa2; }
+        .cell[data-mines="5"] { color: #ff8f00; }
+        .cell[data-mines="6"] { color: #00897b; }
+        .cell[data-mines="7"] { color: #5d4037; }
+        .cell[data-mines="8"] { color: #455a64; }
+
+        /* ゲームオーバー/クリア時のメッセージ */
+        #message-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none; /* 初期状態は非表示 */
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        #message-box {
+            background-color: white;
+            padding: 2rem 3rem;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: pop-in 0.3s ease-out;
+        }
+        
+        #message-box h2 {
+            margin: 0 0 1rem 0;
+            font-size: 2rem;
+        }
+
+        @keyframes pop-in {
+            from { transform: scale(0.7); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h1>マインスイーパー</h1>
+
+        <div class="difficulty-controls">
+            <button id="btn-beginner" class="btn active">初級</button>
+            <button id="btn-intermediate" class="btn">中級</button>
+            <button id="btn-expert" class="btn">上級</button>
+        </div>
+        
+        <div class="game-controls">
+             <button id="start-btn" class="btn">ゲーム開始</button>
+        </div>
+
+        <div class="game-info">
+            残り地雷数: <span id="mines-count">0</span>
+        </div>
+
+        <div id="game-grid"></div>
+
+    </div>
+
+    <div id="message-overlay">
+        <div id="message-box">
+            <h2 id="message-text"></h2>
+            <button id="retry-btn" class="btn">リトライ</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- DOM要素の取得 ---
+        const gridElement = document.getElementById('game-grid');
+        const minesCountElement = document.getElementById('mines-count');
+        const startBtn = document.getElementById('start-btn');
+        const messageOverlay = document.getElementById('message-overlay');
+        const messageText = document.getElementById('message-text');
+        const retryBtn = document.getElementById('retry-btn');
+        const difficultyBtns = {
+            beginner: document.getElementById('btn-beginner'),
+            intermediate: document.getElementById('btn-intermediate'),
+            expert: document.getElementById('btn-expert'),
+        };
+
+        // --- ゲーム設定 ---
+        const difficulties = {
+            beginner: { rows: 9, cols: 9, mines: 5 },
+            intermediate: { rows: 16, cols: 16, mines: 40 },
+            expert: { rows: 20, cols: 30, mines: 99 } // ユーザーの要望に合わせて変更 (縦20 x 横30)
+        };
+        let currentDifficulty = 'beginner';
+
+        // --- ゲームの状態変数 ---
+        let board = [];
+        let totalMines = 0;
+        let flagsPlaced = 0;
+        let revealedCells = 0;
+        let isGameOver = false;
+        let isFirstClick = true;
+
+        // --- イベントリスナーの設定 ---
+        startBtn.addEventListener('click', () => {
+            startGame(currentDifficulty);
+        });
+        
+        retryBtn.addEventListener('click', () => {
+            messageOverlay.style.display = 'none';
+            startGame(currentDifficulty);
+        });
+
+        Object.keys(difficultyBtns).forEach(level => {
+            difficultyBtns[level].addEventListener('click', () => {
+                // 既にゲームが始まっている場合は難易度変更不可
+                if (!isFirstClick) return;
+
+                // 選択されたボタンに .active クラスを付与
+                Object.values(difficultyBtns).forEach(btn => btn.classList.remove('active'));
+                difficultyBtns[level].classList.add('active');
+                currentDifficulty = level;
+
+                // 難易度変更時にゲームを初期化
+                startGame(currentDifficulty);
+            });
+        });
+        
+        // --- ゲームの初期化・開始 ---
+        function startGame(difficulty) {
+            const config = difficulties[difficulty];
+            
+            // ゲーム状態をリセット
+            isGameOver = false;
+            isFirstClick = true;
+            flagsPlaced = 0;
+            revealedCells = 0;
+            totalMines = config.mines;
+
+            // UIの更新
+            gridElement.innerHTML = '';
+            gridElement.style.gridTemplateColumns = `repeat(${config.cols}, 30px)`;
+            startBtn.textContent = 'リトライ'; // 開始後はリトライに表示変更
+            minesCountElement.textContent = totalMines;
+            
+            // ボードの内部表現を作成
+            board = Array.from({ length: config.rows }, () => 
+                Array.from({ length: config.cols }, () => ({
+                    isMine: false,
+                    isRevealed: false,
+                    isFlagged: false,
+                    adjacentMines: 0
+                }))
+            );
+
+            // グリッドを画面上に描画
+            createGrid(config.rows, config.cols);
+        }
+
+        // --- グリッドの描画 ---
+        function createGrid(rows, cols) {
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cellElement = document.createElement('div');
+                    cellElement.classList.add('cell');
+                    cellElement.dataset.row = r;
+                    cellElement.dataset.col = c;
+                    
+                    // 左クリックイベント
+                    cellElement.addEventListener('click', () => handleCellClick(r, c));
+                    // 右クリックイベント
+                    cellElement.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        handleRightClick(r, c);
+                    });
+
+                    gridElement.appendChild(cellElement);
+                }
+            }
+        }
+
+        // --- 左クリック処理 ---
+        function handleCellClick(row, col) {
+            if (isGameOver) return;
+            const cell = board[row][col];
+            if (cell.isRevealed || cell.isFlagged) return;
+
+            // 最初のクリックの場合、地雷を配置
+            if (isFirstClick) {
+                placeMines(row, col);
+                isFirstClick = false;
+            }
+
+            // 地雷を踏んだ場合
+            if (cell.isMine) {
+                gameOver(false, row, col);
+                return;
+            }
+
+            revealCell(row, col);
+            checkWin();
+        }
+
+        // --- 右クリック処理 (旗の設置/解除) ---
+        function handleRightClick(row, col) {
+            if (isGameOver) return;
+            const cell = board[row][col];
+            if (cell.isRevealed) return;
+
+            cell.isFlagged = !cell.isFlagged;
+            flagsPlaced += cell.isFlagged ? 1 : -1;
+            
+            updateUI();
+            checkWin(); // 旗を立てただけでクリアになる場合がある
+        }
+        
+        // --- 地雷の配置 ---
+        function placeMines(firstClickRow, firstClickCol) {
+            const { rows, cols } = difficulties[currentDifficulty];
+            let minesToPlace = totalMines;
+
+            while (minesToPlace > 0) {
+                const r = Math.floor(Math.random() * rows);
+                const c = Math.floor(Math.random() * cols);
+
+                // 最初のクリック箇所と地雷が既に存在するマスは避ける
+                if (r === firstClickRow && c === firstClickCol) continue;
+                if (board[r][c].isMine) continue;
+
+                board[r][c].isMine = true;
+                minesToPlace--;
+            }
+
+            // 各マスの周囲の地雷数を計算
+            calculateAdjacentMines();
+        }
+
+        // --- 周囲の地雷数を計算 ---
+        function calculateAdjacentMines() {
+             const { rows, cols } = difficulties[currentDifficulty];
+             for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (board[r][c].isMine) continue;
+                    let count = 0;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = r + dr;
+                            const nc = c + dc;
+                            if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && board[nr][nc].isMine) {
+                                count++;
+                            }
+                        }
+                    }
+                    board[r][c].adjacentMines = count;
+                }
+            }
+        }
+        
+        // --- マスを開く処理 (連鎖オープンも含む) ---
+        function revealCell(row, col) {
+            const { rows, cols } = difficulties[currentDifficulty];
+            if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+
+            const cell = board[row][col];
+            if (cell.isRevealed || cell.isFlagged) return;
+
+            cell.isRevealed = true;
+            revealedCells++;
+            
+            const cellElement = document.querySelector(`[data-row='${row}'][data-col='${col}']`);
+            cellElement.classList.add('revealed');
+
+            if (cell.adjacentMines > 0) {
+                cellElement.textContent = cell.adjacentMines;
+                cellElement.dataset.mines = cell.adjacentMines;
+            } else {
+                // 周囲の地雷が0なら、隣接するマスも開く (連鎖オープン)
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        revealCell(row + dr, col + dc);
+                    }
+                }
+            }
+        }
+
+        // --- UIの更新 ---
+        function updateUI() {
+            const { rows, cols } = difficulties[currentDifficulty];
+            minesCountElement.textContent = totalMines - flagsPlaced;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = board[r][c];
+                    const cellElement = document.querySelector(`[data-row='${r}'][data-col='${c}']`);
+                    
+                    cellElement.classList.toggle('flagged', cell.isFlagged);
+
+                    if (isGameOver && cell.isMine && !cell.isFlagged) {
+                        cellElement.classList.add('mine');
+                    }
+                }
+            }
+        }
+        
+        // --- 勝利判定 ---
+        function checkWin() {
+            const { rows, cols } = difficulties[currentDifficulty];
+            const totalNonMineCells = rows * cols - totalMines;
+
+            // 地雷以外のマスがすべて開かれたら勝利
+            if (revealedCells === totalNonMineCells) {
+                gameOver(true);
+            }
+            // または、すべての地雷に旗が立てられ、かつ地雷でないマスが全て開かれた場合
+            // ※このロジックは仕様書にありますが、revealedCellsのチェックで網羅できます。
+            // 旗の数が地雷の総数と一致し、かつ開いたマスの数が正しければ勝利という判定も可能です。
+        }
+
+        // --- ゲーム終了処理 ---
+        function gameOver(isWin, clickedRow = -1, clickedCol = -1) {
+            if (isGameOver) return;
+            isGameOver = true;
+            
+            if (isWin) {
+                messageText.textContent = 'ゲームクリア！ 🎉';
+                messageText.style.color = 'var(--primary-color)';
+            } else {
+                messageText.textContent = 'ゲームオーバー';
+                messageText.style.color = 'var(--danger-color)';
+                // すべての地雷を表示
+                const { rows, cols } = difficulties[currentDifficulty];
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        if (board[r][c].isMine) {
+                            const cellEl = document.querySelector(`[data-row='${r}'][data-col='${c}']`);
+                             if (r === clickedRow && c === clickedCol) {
+                                cellEl.classList.add('exploded');
+                            } else {
+                                cellEl.classList.add('mine');
+                            }
+                        }
+                    }
+                }
+            }
+            messageOverlay.style.display = 'flex';
+        }
+
+        // --- 初期ゲームの開始 ---
+        startGame(currentDifficulty);
+    </script>
+</body>
+</html>
